@@ -1,17 +1,18 @@
 ﻿using System.Buffers;
 using System.Net.Http.Headers;
 using System.Threading.Tasks.Dataflow;
+using TUM.LinkChecker.Model;
 
 namespace TUM.LinkChecker;
 
 public class WebDlImplementation
 {
-    internal static async Task<AbstractWebDlResult> Download(WebDlTask task)
+    internal static async Task<WebDlResult> Download(WebDlTask task)
     {
         // Cancel at beginning if requested from outside
         if (task.CancellationToken.IsCancellationRequested)
         {
-            return new AbstractWebDlCancelledFailResult(task);
+            return new WebDlResultFail(task, WebDlFailReason.Cancelled, new TaskCanceledException());
         }
 
         HttpResponseMessage? response = null;
@@ -28,11 +29,15 @@ public class WebDlImplementation
             {
                 // TODO dispose content using try-finally block instead (maybe)
                 response?.Content.Dispose();
-                return new AbstractWebDlCancelledFailResult(task, e);
+                //return new AbstractWebDlCancelledFailResult(task, e);
+                return new WebDlResultFail(task, WebDlFailReason.Cancelled, e);
             }
 
             // Handle timeouts
-            return new AbstractWebDlFailResult(task, e);
+            if (e is TaskCanceledException)
+                return new WebDlResultFail(task, WebDlFailReason.Timeout, e);
+
+            return new WebDlResultFail(task, WebDlFailReason.OtherError, e);
         }
 
         // If headers are only requested or content is not html, stop download and return headers only
@@ -40,12 +45,12 @@ public class WebDlImplementation
             response.Content.Headers.ContentType?.MediaType is not "text/html" and not "application/xhtml+xml")
         {
             response.Content.Dispose();
-            return new WebDlHeadersResult(task, response, response.Content.Headers);
+            return new WebDlResultSuccess(task, TimeSpan.Zero, response, new ContentNotRequestedResult());
         }
 
         // Sets the memory stream to the size of the content length or 10MB if not specified
         PooledContent? pooledContent = new PooledContent((int)(response.Content.Headers.ContentLength ?? 10_000_000));
-        ContentResult contentResult = ContentResult.Ok;
+        ContentFailReason contentFailReason = ContentFailReason.Ok;
         Exception? contentException = null;
         try
         {
@@ -65,20 +70,20 @@ public class WebDlImplementation
             if (task.CancellationToken.IsCancellationRequested)
             {
                 response.Content.Dispose();
-                return new AbstractWebDlCancelledFailResult(task, e);
+                return new WebDlResultFail(task, WebDlFailReason.Cancelled, e);
             }
 
             // Handle different exceptions
             switch (e)
             {
                 case TaskCanceledException:
-                    contentResult = ContentResult.Timeout;
+                    contentFailReason = ContentFailReason.Timeout;
                     break;
                 case NotSupportedException:
-                    contentResult = ContentResult.TooLarge;
+                    contentFailReason = ContentFailReason.TooLarge;
                     break;
                 default:
-                    contentResult = ContentResult.OtherError;
+                    contentFailReason = ContentFailReason.OtherError;
                     break;
             }
 
@@ -88,73 +93,52 @@ public class WebDlImplementation
         // If the content was not successfully downloaded, return headers only
         if (pooledContent == null)
         {
-            return new WebDlHeadersResult(task, response, response.Content.Headers, contentResult, contentException);
+            return new WebDlResultSuccess(task, TimeSpan.Zero, response,
+                new ContentResultFail(contentFailReason, contentException!));
         }
-        
+
         // Sets the MemoryStreams size to the actual content length. And sets the position to 1.
         // This will not change the underlying buffer array size.
         // TODO: If too much memory is wasted, it could be considered copying it to a new MemoryStream
         pooledContent.ContentStream.SetLength(pooledContent.ContentStream.Position);
         pooledContent.ContentStream.Position = 1;
 
-        return new WebDlHeadersAndContentResult(task, response, response.Content.Headers, pooledContent);
+        return new WebDlResultSuccess(task, TimeSpan.Zero, response, new ContentResultSuccess(pooledContent));
     }
 }
 
 record WebDlTask(
     Uri Uri,
-    bool HeadersOnly,
+    bool HeadersOnly, // Should not be used
     HttpClient Client,
     CancellationToken CancellationToken = default,
     double HeadersTimeoutSeconds = 10,
     double ContentTimeoutSeconds = 10);
 
-abstract record AbstractWebDlResult(WebDlTask Task)
+abstract record WebDlResult(WebDlTask Task);
+
+record WebDlResultFail(WebDlTask Task, WebDlFailReason FailReason, Exception Exception) : WebDlResult(Task);
+
+enum WebDlFailReason
 {
-    internal abstract bool Success { get; }
-    internal abstract bool FullSuccess { get; }
-    
+    Timeout,
+    Cancelled,
+    OtherError
 }
 
-record AbstractWebDlFailResult(WebDlTask Task, Exception? Exception) : AbstractWebDlResult(Task)
-{
-    internal override bool Success => false;
-    internal override bool FullSuccess => false;
-    internal virtual bool ManuallyCancelled => false;
-}
-
-record AbstractWebDlCancelledFailResult(
+record WebDlResultSuccess(
     WebDlTask Task,
-    Exception? Exception = null) : AbstractWebDlFailResult(Task, Exception)
-{
-    internal override bool Success => false;
-    internal override bool ManuallyCancelled => false;
-}
-
-record WebDlHeadersResult(
-    WebDlTask Task,
+    TimeSpan Duration,
     HttpResponseMessage Response,
-    HttpContentHeaders ContentHeaders,
-    ContentResult ContentResult = ContentResult.Ok,
-    Exception? Exception = null) : AbstractWebDlResult(Task)
-{
-    internal override bool Success => true;
-    internal override bool FullSuccess => ContentResult == ContentResult.Ok;
-    internal virtual bool HasContent => false;
-}
+    ContentResult ContentResult) : WebDlResult(Task);
 
-record WebDlHeadersAndContentResult(
-    WebDlTask Task,
-    HttpResponseMessage Response,
-    HttpContentHeaders ContentHeaders, PooledContent Content)
-    : WebDlHeadersResult(Task, Response, ContentHeaders)
-{
-    internal override bool Success => true;
-    
-    internal override bool HasContent => true;
-}
+abstract record ContentResult;
 
+record ContentResultFail(ContentFailReason FailReason, Exception Exception) : ContentResult;
 
+record ContentNotRequestedResult : ContentResult;
+
+record ContentResultSuccess(PooledContent Content) : ContentResult;
 
 /// <summary>
 /// Manages an MemoryStream containing the content of a web request.
@@ -189,7 +173,7 @@ internal class PooledContent : IDisposable
     }
 }
 
-enum ContentResult
+enum ContentFailReason
 {
     Ok,
     Timeout,

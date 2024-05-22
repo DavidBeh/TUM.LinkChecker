@@ -1,16 +1,18 @@
 ﻿using QuikGraph;
 using QuikGraph.Algorithms.ShortestPath;
 using QuikGraph.Predicates;
+using TUM.LinkChecker.Model;
 
 namespace TUM.LinkChecker;
 
-public class Scraper
+public class LinkChecker
 {
-    internal BidirectionalGraph<LCVertex, LCEdge> Graph { get; } = new();
+    internal BidirectionalGraph<Website, WebRef> Graph { get; } = new();
     public List<Website> Websites { get; } = new();
-    public Scraper()
+    
+    public LinkChecker()
     {
-
+        
     }
 
     public void AddWebsite(string url)  

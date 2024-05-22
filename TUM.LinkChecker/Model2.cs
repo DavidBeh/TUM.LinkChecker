@@ -1,30 +1,64 @@
-﻿namespace TUM.LinkChecker.Model;
+﻿using System.Net;
+using QuikGraph;
 
-public class Webressource
+namespace TUM.LinkChecker.Model;
+
+public class Website
 {
-    public string Url { get; set; }
-    public List<Snapshot> Snapshots { get; set; }
+    public Uri? Uri { get; set; }
+    public AnalysisData? AnalysisData { get; set; }
+    public AnalysisStatus AnalysisStatus { get; set; } = AnalysisStatus.NotRequested;
+
+    public enum Type : int
+    {
+        /// <summary>
+        /// Root of the Graph
+        /// </summary>
+        Root = 0,
+        Normal = 1,
+        /// <summary>
+        ///  Source is Broken
+        /// </summary>
+        LinkFormatError = 2,
+    }
 }
 
-public class Snapshot
+public class WebRef : Edge<Website>
 {
-    public DateTime Timestamp { get; set; }
-    
-    public bool ContentRequested { get; set; }
-    public bool ContentRecieved { get; set; }
-    public Exception Exception { get; set; }
-    public HttpRequestData? RequestData { get; set; }
-    public HttpResponseData? ResponseData { get; set; }
-    public ContentAnalyzeResult? ContentAnalysisResult { get; set; }
-    
-    internal AbstractWebDlResult WebDlResult { get; set; }
+    public string Uri { get; set; }
+    public string Text { get; set; }
+    public WebRef(Website source, Website target, string uri, string text) : base(source, target)
+    {
+        Uri = uri;
+        Text = text;
+    }
+}
+
+public class AnalysisData
+{
+    public List<Exception> Exceptions { get; set; } = new();
+    public HttpRequestData? HttpRequestData { get; set; }
+    public HttpResponseData? HttpResponseData { get; set; }
+
+}
+
+public enum AnalysisStatus
+{
+    NotRequested,
+    Queued,
+    InProgress,
+    Done,
+    Failed
+}
+
+public class AnalysisResult
+{
+    public HttpRequestData HttpRequestData { get; set; }
+    public HttpResponseData HttpResponseData { get; set; }
 }
 
 public class HttpRequestData
 {
-    double? HeaderTimeout { get; set; }
-    double? ContentTimeout { get; set; }
-    bool? OnlyHeader { get; set; }
     public string? UserAgent { get; set; }
     public string? Accept { get; set; }
     public string? ContentType { get; set; }
@@ -39,24 +73,33 @@ public class ContentAnalyzeResult
 
 public class HttpResponseData
 {
-    HeaderData? Header { get; set; }
-    public int? RealContentSize { get; set; }
+    public ContentData? ContentData { get; set; }
+    public string? ContentType { get; set; }
+    public HttpStatusCode? StatusCode { get; set; }
     
     public Exception? Exception { get; set; }
-    public bool? ContentRequested { get; set; }
-}
-
-public class HeaderData
-{
-    public string? ContentType { get; set; }
-    public int? ContentLength { get; set; }
+    ResponseStatus Status { get; set; }
+    
+    public int? RealContentLength { get; set; }
+    public int? ContentLengthHeader { get; set; }
     public string? ETag { get; set; }
-    public string? Location;
-    public HttpStatusCode StatusCode { get; set; }
+    
+
 }
 
-public class OptionalData<TData, TError>
+public class ContentData
 {
-    public TData? Data { get; set; }
-    public TError? Error { get; set; }
+    ResponseStatus Status { get; set; }
+    
+    public string Title { get; set; }
 }
+
+
+enum ResponseStatus
+{
+    Success,
+    Timeout,
+    TooLarge,
+    NetworkError,
+}
+
