@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TUM.LinkChecker", "TUM.Link
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestConsole", "TestConsole\TestConsole.csproj", "{D4C22B1D-20E2-4211-BC9E-B9E3BC754097}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TUM.SimpleLinkChecker", "TUM.SimpleLinkChecker\TUM.SimpleLinkChecker.csproj", "{527828A1-2302-4447-B6A8-C937303AECC7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleTestConsole", "SimpleTestConsole\SimpleTestConsole.csproj", "{2FD7B5F8-26FA-46CF-9990-1D9DE3E79BAB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,13 @@ Global
 		{D4C22B1D-20E2-4211-BC9E-B9E3BC754097}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D4C22B1D-20E2-4211-BC9E-B9E3BC754097}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D4C22B1D-20E2-4211-BC9E-B9E3BC754097}.Release|Any CPU.Build.0 = Release|Any CPU
+		{527828A1-2302-4447-B6A8-C937303AECC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{527828A1-2302-4447-B6A8-C937303AECC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{527828A1-2302-4447-B6A8-C937303AECC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{527828A1-2302-4447-B6A8-C937303AECC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2FD7B5F8-26FA-46CF-9990-1D9DE3E79BAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2FD7B5F8-26FA-46CF-9990-1D9DE3E79BAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2FD7B5F8-26FA-46CF-9990-1D9DE3E79BAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2FD7B5F8-26FA-46CF-9990-1D9DE3E79BAB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

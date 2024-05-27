@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Net.Http.Headers;
+using System.Net.Mime;
 using System.Threading.Tasks.Dataflow;
 using TUM.LinkChecker.Model;
 
@@ -7,7 +8,7 @@ namespace TUM.LinkChecker;
 
 public class WebDlImplementation
 {
-    internal static async Task<WebDlResult> Download(WebDlTask task)
+    public static async Task<WebDlResult> Download(WebDlTask task)
     {
         // Cancel at beginning if requested from outside
         if (task.CancellationToken.IsCancellationRequested)
@@ -18,8 +19,17 @@ public class WebDlImplementation
         HttpResponseMessage? response = null;
         try
         {
+            // Construct a Get request with default Accept header html and image and Upgrade-Insecure-Requests header
+            var request = new HttpRequestMessage(HttpMethod.Get, task.Uri);
+            
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
+            request.Headers.Remove("User-Agent");
+            request.Headers.Add("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
+            request.Headers.Add("Upgrade-Insecure-Requests", "1");
             // Start the request. Returns as soon as headers are received
-            response = await task.Client.GetAsync(task.Uri, HttpCompletionOption.ResponseHeadersRead,
+            response = await task.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
                 Util.CreateCancellationTokenFromSeconds(task.HeadersTimeoutSeconds, task.CancellationToken));
         }
         catch (Exception e)
@@ -107,7 +117,7 @@ public class WebDlImplementation
     }
 }
 
-record WebDlTask(
+public record WebDlTask(
     Uri Uri,
     bool HeadersOnly, // Should not be used
     HttpClient Client,
@@ -115,37 +125,37 @@ record WebDlTask(
     double HeadersTimeoutSeconds = 10,
     double ContentTimeoutSeconds = 10);
 
-abstract record WebDlResult(WebDlTask Task);
+public abstract record WebDlResult(WebDlTask Task);
 
-record WebDlResultFail(WebDlTask Task, WebDlFailReason FailReason, Exception Exception) : WebDlResult(Task);
+public record WebDlResultFail(WebDlTask Task, WebDlFailReason FailReason, Exception Exception) : WebDlResult(Task);
 
-enum WebDlFailReason
+public enum WebDlFailReason
 {
     Timeout,
     Cancelled,
     OtherError
 }
 
-record WebDlResultSuccess(
+public record WebDlResultSuccess(
     WebDlTask Task,
     TimeSpan Duration,
     HttpResponseMessage Response,
     ContentResult ContentResult) : WebDlResult(Task);
 
-abstract record ContentResult;
+public abstract record ContentResult;
 
-record ContentResultFail(ContentFailReason FailReason, Exception Exception) : ContentResult;
+public record ContentResultFail(ContentFailReason FailReason, Exception Exception) : ContentResult;
 
-record ContentNotRequestedResult : ContentResult;
+public record ContentNotRequestedResult : ContentResult;
 
-record ContentResultSuccess(PooledContent Content) : ContentResult;
+public record ContentResultSuccess(PooledContent Content) : ContentResult;
 
 /// <summary>
 /// Manages an MemoryStream containing the content of a web request.
 /// The MemoryStreams buffer is rented from the ArrayPool and should
 /// therefore be returned by calling this classes Dispose method.
 /// </summary>
-internal class PooledContent : IDisposable
+public class PooledContent : IDisposable
 {
     internal readonly MemoryStream ContentStream;
 
@@ -173,7 +183,7 @@ internal class PooledContent : IDisposable
     }
 }
 
-enum ContentFailReason
+public enum ContentFailReason
 {
     Ok,
     Timeout,

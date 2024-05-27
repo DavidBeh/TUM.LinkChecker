@@ -2,29 +2,25 @@
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using TUM.LinkChecker;
+using TUM.LinkChecker.Model;
 
 
-var uri = new Uri("https://tum.de");
-var client = new HttpClient();
-var task = new WebDlTask(uri, false, client);
-var download = await WebDlImplementation.Download(task);
+var baseUrl = new Uri("https://tum.de");
 
-if (download is WebDlHeadersAndContentResult headersAndContent)
+var testUrl1 = "/studium/studienangebot/studiengaenge/studiengang.html";
+var testUrl2 = "https://www.it.tum.de/it/aktuelles/";
+
+var uri1 = TryCreateUri(baseUrl, testUrl1);
+var uri2 = TryCreateUri(baseUrl, testUrl2);
+Uri.TryCreate(baseUrl, testUrl2, out var uri3);
+Console.WriteLine($"{uri1}\n{uri2}\n{uri3}");
+
+Uri? TryCreateUri(Uri? baseUri, string relativeOrAbsoluteUrl)
 {
-    Console.WriteLine(headersAndContent);
-    var doc = new HtmlDocument();
-    doc.Load(headersAndContent.Content.ContentStream, true);
-    doc.DocumentNode.SelectNodes("/html/body//a")
-        .Where(node => node.Attributes.Contains("href")).Select(node =>
-        {
-            var text = Regex.Replace(node.InnerText.Trim(), @"\s+", " "); // Remove multiple whitespaces
-            // Remove linebreaks:
-            text = text.Replace("\n", " ").Replace("\r", " ");
-            
-            return $"{node.Attributes["href"].Value}: {text}";
-        }).ToList().ForEach(Console.WriteLine);
-}
-else
-{
-    Console.WriteLine("No content to analyze");
+    if (!Uri.TryCreate(relativeOrAbsoluteUrl, UriKind.Absolute, out var result))
+    {
+        if (baseUri == null) return null;
+        Uri.TryCreate(baseUri, relativeOrAbsoluteUrl, out result);
+    }
+    return result;
 }
