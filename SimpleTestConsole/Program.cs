@@ -29,6 +29,7 @@ void Create1NfEntries()
         LinkMalformed = false,
         SourceSiteTitle = webRef.website.ContentData?.Title,
         TargetSiteTitle = website.ContentData?.Title,
+        PageId = webRef.website.ContentData?.Typo3PageId
     })).Concat(list!.SelectMany(website => website.OutgoingNonHttpHttpsLinks.Select(data => new OutputEntry()
     {
         SourceSite = website.Uri,
@@ -39,7 +40,8 @@ void Create1NfEntries()
         TargetSite = null,
         TargetSiteTitle = null,
         HttpStatusCode = null,
-    }))).Where(entry => entry.SourceSite == null || entry.SourceSite?.Host == "www.it.tum.de").ToList();
+        PageId = website.ContentData?.Typo3PageId
+    }))).Where(entry => entry.SourceSite == null || entry.SourceSite?.Host == "www.it.tum.de").Where(entry => entry.HttpStatusCode != HttpStatusCode.OK).ToList();
     var serialize = JsonSerializer.Serialize(output
         , options);
 
@@ -91,4 +93,5 @@ public class OutputEntry
     public HttpStatusCode? HttpStatusCode { get; set; }
     public string? LinkText { get; set; }
     public string? RawLink { get; set; }
+    public string? PageId { get; set; }
 }
