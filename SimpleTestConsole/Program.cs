@@ -11,7 +11,7 @@ var options = new JsonSerializerOptions()
 {
     IncludeFields = true,
 };
-var list = JsonSerializer.Deserialize<List<Website>>(File.ReadAllText("filtered.json"), options);
+var list = JsonSerializer.Deserialize<List<WebSnapshot>>(File.ReadAllText("filtered.json"), options);
 
 LinkWebRef(list!);
 
@@ -21,15 +21,15 @@ void Create1NfEntries()
 {
     var output = list!.SelectMany(website => website.SourceSites.Select(webRef => new OutputEntry()
     {
-        SourceSite = webRef.website.Uri,
+        SourceSite = webRef.WebSnapshot.Uri,
         TargetSite = website.Uri,
         HttpStatusCode = website.HttpStatusCode,
         LinkText = webRef.linkData.Text,
         RawLink = webRef.linkData.Url,
         LinkMalformed = false,
-        SourceSiteTitle = webRef.website.ContentData?.Title,
+        SourceSiteTitle = webRef.WebSnapshot.ContentData?.Title,
         TargetSiteTitle = website.ContentData?.Title,
-        PageId = webRef.website.ContentData?.Typo3PageId
+        PageId = webRef.WebSnapshot.ContentData?.Typo3PageId
     })).Concat(list!.SelectMany(website => website.OutgoingNonHttpHttpsLinks.Select(data => new OutputEntry()
     {
         SourceSite = website.Uri,
@@ -75,11 +75,11 @@ var deserialize = JsonSerializer.Deserialize<List<Website>>(File.ReadAllText("fi
 LinkWebRef(deserialize!);
 */
 
-void LinkWebRef(List<Website> websites)
+void LinkWebRef(List<WebSnapshot> websites)
 {
     foreach (var website in websites)
     {
-        website.SourceSites.ForEach(webRef => webRef.website = websites.First(w => w.Id == webRef.WebsiteId));
+        website.SourceSites.ForEach(webRef => webRef.WebSnapshot = websites.First(w => w.Id == webRef.WebsiteId));
     }
 }
 

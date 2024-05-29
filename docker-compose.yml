@@ -1,0 +1,16 @@
+﻿services:
+#  tum.simplelinkchecker:
+#    image: tum.simplelinkchecker
+#    build:
+#      context: .
+#      dockerfile: TUM.SimpleLinkChecker/Dockerfile
+  db:
+    image: postgres:16.3
+    environment:
+      POSTGRES_USER: tum
+      POSTGRES_PASSWORD: tum
+      POSTGRES_DB: tum
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/:/var/lib/postgresql/data
