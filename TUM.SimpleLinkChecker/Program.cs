@@ -2,12 +2,11 @@
 
 using System.Diagnostics;
 using System.Net;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
+using QuikGraph;
+using QuikGraph.Algorithms;
+using QuikGraph.Algorithms.ShortestPath;
 using TUM.LinkChecker;
-using TUM.LinkChecker.Model;
 using TUM.SimpleLinkChecker;
 using TUM.SimpleLinkChecker.Data;
 using WebRef = TUM.SimpleLinkChecker.Data.WebRef;
@@ -17,19 +16,139 @@ Console.WriteLine("Hello, World!");
 
 var lc = new LinkChecker();
 await lc.RunScanner();
+lc.Scrapes.ForEach(scrape =>
+    scrape.Snapshots = lc.Snapshots.Where(snapshot => snapshot.ScrapeId == scrape.ScrapeId).ToList());
+lc.Snapshots.AsParallel().ForAll(snapshot =>
+{
+    snapshot.OutgoingLinks = lc.WebRefs.Where(webRef => webRef.SourceId == snapshot.SnapshotId).ToList();
+    snapshot.IncomingLinks = lc.WebRefs.Where(webRef => webRef.TargetId == snapshot.SnapshotId).ToList();
+    snapshot.Scrape = lc.Scrapes.First(scrape => scrape.ScrapeId == snapshot.ScrapeId);
+});
+lc.WebRefs.AsParallel().ForAll(webRef =>
+{
+    webRef.Source = lc.Snapshots.First(snapshot => snapshot.SnapshotId == webRef.SourceId);
+    webRef.Target = webRef.TargetId == null
+        ? null
+        : lc.Snapshots.First(snapshot => snapshot.SnapshotId == webRef.TargetId);
+});
+/*
+object brokenRoot = new();
+object malformed = new();
+var graph = new BidirectionalGraph<object, TaggedEdge<object, WebRef?>>();
+graph.AddVertex(brokenRoot);
+graph.AddVertex(malformed);
+graph.AddEdge(new TaggedEdge<object, WebRef?>(brokenRoot, malformed, null));
+graph.AddVertexRange(lc.Snapshots);
+graph.AddEdgeRange(lc.WebRefs.Select(webRef =>
+    new TaggedEdge<object, WebRef?>(webRef.Target ?? malformed, webRef.Source, webRef)));
+*/
+var sitesWithErrors = lc.Snapshots
+    .Where(snapshot => snapshot.Status != DataStatus.Pending &&
+                       (snapshot.HttpStatusCode == null || (int)snapshot.HttpStatusCode < 200 ||
+                        (int)snapshot.HttpStatusCode >= 400 ||
+                        snapshot.Status == DataStatus.Error)).ToList();
 
-DateTime dt = DateTime.Now;
+HashSet<WebRef> webRefsInLinks = new();
+
+webRefsInLinks.UnionWith(sitesWithErrors.SelectMany(snapshot =>
+    snapshot.IncomingLinks.Where(wr => wr.Source.AnalyzeBecauseUrl)));
+webRefsInLinks.UnionWith(webRefsInLinks.Where(wr => wr.Type is "redirect").SelectMany(wr => wr.Source.IncomingLinks)
+    .Where(wr => wr.Source.AnalyzeBecauseUrl).ToList());
+
+var malformedLinks = lc.WebRefs.Where(webRef => webRef is { LinkMalformed: true, Source.AnalyzeBecauseUrl: true }).ToList();
+webRefsInLinks.UnionWith(malformedLinks);
+/*
+graph.AddEdgeRange(sitesWithErrors.Select(snapshot =>
+    new TaggedEdge<object, WebRef?>(brokenRoot, snapshot, null)));
+
+Func<TaggedEdge<object, WebRef?>, double> edgeWeights = d =>
+    d.Source == brokenRoot || (d.Tag?.Type == "redirect") ? 0 : 1;
+
+var dijkstra = new DijkstraShortestPathAlgorithm<object, TaggedEdge<object, WebRef?>>(graph, edgeWeights);
+
+
+dijkstra.Compute(brokenRoot);
+HashSet<WebRef> relevantRefs = new();
+HashSet<Snapshot> relevantSnapshots = new();
+foreach (var kvp in dijkstra.GetDistances())
+{
+    if ((kvp.Key as Snapshot)?.HttpStatusCode == HttpStatusCode.NotFound)
+        Debugger.Break();
+    Console.WriteLine($"Distance to {kvp.Key} is {kvp.Value}");
+    if (kvp.Value > 1) break;
+    int count = 0;
+    foreach (var x in graph.RankedShortestPathHoffmanPavley(edgeWeights, brokenRoot, kvp.Key, 10))
+    {
+        count++;
+        Console.WriteLine($"Path {count}: {string.Join(" -> ", x.Select(o => o.ToString()))}");
+        // get path length and check if it is relevant
+        var len = x.Select(edgeWeights).Sum();
+        if (len == 0)
+        {
+            Console.WriteLine("Weird length detected: Path: " + string.Join(" -> ", x.Select(o => o.ToString())));
+        }
+
+        if (len > 1) break;
+        foreach (var edge in x)
+        {
+            if (edge.Target is Snapshot target) relevantSnapshots.Add(target);
+            if (edge.Source is Snapshot source) relevantSnapshots.Add(source);
+            if (edge.Tag != null)
+                relevantRefs.Add(edge.Tag);
+        }
+    }
+}
+*/
+
+int savedBrokenLinks = webRefsInLinks.Count(wr => wr.Target != null && sitesWithErrors.Contains(wr.Target));
+int savedMalformedLinks = malformedLinks.Count;
+Console.WriteLine("Saving " + savedBrokenLinks + " broken links and " + savedMalformedLinks + " malformed links");
+
+lc.Scrapes.ForEach(scrape => scrape.Snapshots = []);
+var saveSites = webRefsInLinks.Select(wr => wr.Source)
+    .Concat(webRefsInLinks.Select(wr => wr.Target).Where(snapshot => snapshot != null)).Concat(sitesWithErrors)
+    .Distinct().ToList();
+
+saveSites.ForEach(snapshot =>
+{
+    snapshot.IncomingLinks = [];
+    snapshot.OutgoingLinks = [];
+    snapshot.Scrape = null;
+});
+
+var saveWebRefs = webRefsInLinks.Select(webRef => webRef).ToList();
+saveWebRefs.ForEach(webRef =>
+{
+    webRef.Source = null;
+    webRef.Target = null;
+});
+
+var db = AppDbContext.CreateDefaultDbContext();
+await db.Database.MigrateAsync();
+db.Scrapes.AddRange(lc.Scrapes);
+//await db.SaveChangesAsync();
+db.Snapshots.AddRange(saveSites!);
+//await db.SaveChangesAsync();
+db.WebRefs.AddRange(saveWebRefs);
+await db.SaveChangesAsync();
+
+
+Console.WriteLine("");
+
 
 public class LinkChecker
 {
-    public List<WebSnapshot> Websites = new();
-    public List<Uri> InitialWebsites = new();
+    public List<Snapshot> Snapshots = new();
+    public List<WebRef> WebRefs = new();
+    public List<Scrape> Scrapes = new();
+
+    public List<Uri> InitialUris = new();
     private HttpClient _httpClient = new();
-    private AppDbContext _dbContext = AppDbContext.CreateDefaultDbContext();
+    //private AppDbContext _dbContext = AppDbContext.CreateDefaultDbContext();
 
     public LinkChecker()
     {
-        InitialWebsites.Add(new Uri("https://www.it.tum.de/"));
+        InitialUris.Add(new Uri("https://www.it.tum.de/"));
     }
 
     public bool ShouldAnalyze(Uri uri)
@@ -39,182 +158,135 @@ public class LinkChecker
 
     public async Task RunScanner()
     {
-        if (InitialWebsites.Count == 0)
+        if (InitialUris.Count == 0)
             throw new InvalidOperationException("No websites to scan. Add websites to InitialWebsites first");
 
         var scrape = new Scrape()
         {
+            ScrapeId = Guid.NewGuid(),
             TimeStamp = DateTime.Now,
         };
 
-        _dbContext.Scrapes.Add(scrape);
-        await _dbContext.SaveChangesAsync();
+        Scrapes.Add(scrape);
 
-        foreach (var initialWebsite in InitialWebsites)
+        foreach (var initialWebsite in InitialUris)
         {
             var website = GetOrCreateWebsite(initialWebsite, scrape);
             website.AnalyzeBecauseUrl = true;
-            await _dbContext.SaveChangesAsync();
         }
 
         int count = 0;
         while (true)
         {
+
             count++;
-            var website = _dbContext.Snapshots.FirstOrDefault(snapshot => snapshot.ScrapeId == scrape.ScrapeId &&
-                (snapshot.AnalyzeBecauseUrl || snapshot.AnalyzeBecauseReference ) &&
-                snapshot.Status == DataStatus.Pending);
-            if (website == null) break;
+            var snapshot = Snapshots.FirstOrDefault(sn =>
+                sn.Status == DataStatus.Pending && (sn.AnalyzeBecauseUrl || sn.AnalyzeBecauseReference));
+            if (snapshot == null) break;
 
-            //if (Websites.Count > 4000) break;
-            /*var website = Websites.FirstOrDefault(
-                website1 => website1.State == WebsiteState.JustAdded &&
-                            (website1.Uri.Host.Equals("www.it.tum.de") ||
-                             website1.SourceSites.Any(tuple =>
-                                 tuple.WebSnapshot.Uri.Host
-                                     .Equals("www.it.tum.de"))));*/
-            var sourceSite = true||website.AnalyzeBecauseUrl
-                ? null
-                : _dbContext.WebRefs
-                    .Include(webRef => webRef.Source)
-                    .FirstOrDefault(webRef => webRef.TargetId == website.SnapshotId)?.Source;
-            if (false && sourceSite == null && !website.AnalyzeBecauseUrl)
-                Console.WriteLine(
-                    "Unexpected Behavior: Website should be analyzed because of reference, but has no source site.");
+            snapshot.Status = DataStatus.Running;
 
-            website.Status = DataStatus.Running;
-            //await _dbContext.SaveChangesAsync();
-            /*
-            var doneCount = _dbContext.Snapshots.Count(snapshot => snapshot.ScrapeId == scrape.ScrapeId && snapshot.Status == DataStatus.Finished);
-            var pendingCount = _dbContext.Snapshots.Count(snapshot => snapshot.ScrapeId == scrape.ScrapeId &&
-                snapshot.AnalyzeBecauseUrl || snapshot.AnalyzeBecauseReference);
- 
-            double percentageDone = doneCount / (double)(doneCount + pendingCount) * 100;
-           
-            Console.Write(
-                $"Total: {doneCount + pendingCount} {percentageDone:0.##}% Done | Scanning {website.Uri} from {sourceSite?.Uri}...");
-                */
-            Console.Write($"Total: {count} | Scanning {website.Uri} from {sourceSite?.Uri}...");
+            Console.Write($"Total: {count} | Scanning {snapshot.Uri}");
             try
             {
-                new NpgsqlCommand().CreateParameter().
                 var dlResult =
-                    await WebDlImplementation.Download(new WebDlTask(website.Uri, false, _httpClient));
+                    await WebDlImplementation.Download(new WebDlTask(snapshot.Uri, false, _httpClient));
 
                 var redirect = (dlResult as WebDlResultSuccess)?.Response.RequestMessage?.RequestUri;
 
-                if (redirect != null && redirect != website.Uri)
+                if (redirect != null && redirect != snapshot.Uri)
                 {
-                    website.HttpStatusCode = HttpStatusCode.Redirect;
-                    website.ContentStatus = DataStatus.NotRequested;
-                    website.Status = DataStatus.Finished;
+                    snapshot.HttpStatusCode = HttpStatusCode.Redirect;
+                    snapshot.ContentStatus = DataStatus.NotRequested;
+                    snapshot.Status = DataStatus.Finished;
 
                     var redirectedWebsite = GetOrCreateWebsite(redirect, scrape);
                     redirectedWebsite.Status = DataStatus.Running;
                     redirectedWebsite.AnalyzeBecauseReference = true;
                     redirectedWebsite.AnalyzeBecauseUrl = ShouldAnalyze(redirect);
-                    _dbContext.WebRefs.Add(new TUM.SimpleLinkChecker.Data.WebRef()
+                    WebRefs.Add(new WebRef()
                     {
-                        Source = website,
-                        Target = redirectedWebsite,
+                        WebRefId = Guid.NewGuid(),
+                        SourceId = snapshot.SnapshotId,
+                        TargetId = redirectedWebsite.SnapshotId,
                         Type = "redirect",
                     });
-                    await _dbContext.SaveChangesAsync();
-                    website = redirectedWebsite;
+
+                    snapshot = redirectedWebsite;
                 }
 
                 var analyzeResult = await WebContentAnalyzeImplementation.Analyze(new WebContentAnalyzeTask(dlResult));
 
                 if (analyzeResult.HeaderData != null)
                 {
-                    website.HttpStatusCode = analyzeResult.HeaderData.StatusCode;
+                    snapshot.HttpStatusCode = analyzeResult.HeaderData.StatusCode;
+                }
+                else
+                {
+                    snapshot.HttpStatusCode = (HttpStatusCode?)(-1);
                 }
 
                 if (analyzeResult.HtmlContentData != null)
                 {
-                    website.ContentStatus = DataStatus.Finished;
-                    website.C_Title = analyzeResult.HtmlContentData.Title;
-                    website.C_Description = analyzeResult.HtmlContentData.Description;
-                    website.C_Typo3PageId = analyzeResult.HtmlContentData.Typo3PageId;
-                    website.ContentExceptionType = analyzeResult.WebContentHtmlException?.GetType().ToString();
-                    website.ContentExceptionMessage = analyzeResult.WebContentHtmlException?.Message;
+                    snapshot.ContentStatus = DataStatus.Finished;
+                    snapshot.C_Title = analyzeResult.HtmlContentData.Title;
+                    snapshot.C_Description = analyzeResult.HtmlContentData.Description;
+                    snapshot.C_Typo3PageId = analyzeResult.HtmlContentData.Typo3PageId;
+                    snapshot.ContentExceptionType = analyzeResult.WebContentHtmlException?.GetType().ToString();
+                    snapshot.ContentExceptionMessage = analyzeResult.WebContentHtmlException?.Message;
 
                     if (analyzeResult.HtmlContentData?.Links != null)
                     {
-                        var webRefs =
-                            analyzeResult.HtmlContentData.Links.Select(data =>
-                            {
-                                var uri = Helpers.TryCreateUri(website.Uri, data.Url);
-                                return new WebRef()
-                                {
-                                    Source = website,
-                                    Target = uri != null ? new Snapshot() { Uri = uri } : null,
-                                    Type = data.Type,
-                                    RawLink = data.Url,
-                                    LinkText = data.Text,
-                                    LinkMalformed = uri == null,
-                                };
-                            }).Where(wr =>
-                                wr.LinkMalformed || wr.Target!.Uri.Scheme == "http" ||
-                                wr.Target.Uri.Scheme == "https").ToList();
-
-                        var webrefsWithTarget = webRefs.Where(@ref => @ref.Target != null).ToList();
-                        var targetWebsites =
-                            GetOrCreateWebsites(webrefsWithTarget.Select(@ref => @ref.Target!.Uri), scrape);
-                        webrefsWithTarget.ForEach(webRef =>
-                        {
-                            webRef.Target = targetWebsites.First(snapshot => snapshot.Uri == webRef.Target!.Uri);
-                            webRef.Target.AnalyzeBecauseReference = webRef.Target.AnalyzeBecauseReference || website.AnalyzeBecauseUrl;
-                        });
-                        
-                        _dbContext.WebRefs.AddRange(webRefs);
-                        
-                        /*
                         foreach (var link in analyzeResult.HtmlContentData?.Links!)
                         {
-                            var uri = Helpers.TryCreateUri(website.Uri, link.Url);
+                            var uri = Helpers.TryCreateUri(snapshot.Uri, link.Url);
                             if (uri != null && (uri.Scheme == "http" || uri.Scheme == "https"))
                             {
                                 var targetWebsite = GetOrCreateWebsite(SimplifyUri(uri), scrape);
 
-                                var webRef = _dbContext.WebRefs.Add(new TUM.SimpleLinkChecker.Data.WebRef()
+                                var webRef = new WebRef()
                                 {
-                                    Source = website,
-                                    Target = targetWebsite,
+                                    WebRefId = Guid.NewGuid(),
+                                    SourceId = snapshot.SnapshotId,
+                                    TargetId = targetWebsite.SnapshotId,
+                                    LinkText = link.Text,
+                                    RawLink = link.Url,
                                     Type = link.Type,
-                                });
+                                };
                                 if (targetWebsite.AnalyzeBecauseReference == false)
-                                    targetWebsite.AnalyzeBecauseReference = website.AnalyzeBecauseUrl;
+                                    targetWebsite.AnalyzeBecauseReference = snapshot.AnalyzeBecauseUrl;
+                                WebRefs.Add(webRef);
                             }
-                            else
+                            else if (uri == null)// malformed link
                             {
-                                _dbContext.WebRefs.Add(new TUM.SimpleLinkChecker.Data.WebRef()
+                                var webRef = new WebRef()
                                 {
-                                    Source = website,
-                                    Target = null,
+                                    WebRefId = Guid.NewGuid(),
+                                    SourceId = snapshot.SnapshotId,
+                                    LinkText = link.Text,
+                                    RawLink = link.Url,
                                     Type = link.Type,
                                     LinkMalformed = true,
-                                });
+                                };
+                                WebRefs.Add(webRef);
                             }
                         }
-                        */
                     }
-
-
                 }
-                website.Status = DataStatus.Finished;
-                await _dbContext.SaveChangesAsync();
-                Console.WriteLine($" || Done! {website.HttpStatusCode}");
+
+                snapshot.Status = DataStatus.Finished;
+                Console.WriteLine($" || Done! {snapshot.HttpStatusCode}");
             }
             catch (Exception e)
             {
-                website.ExceptionMessage = e.Message;
-                website.ExceptionType = e.GetType().ToString();
-                website.Status = DataStatus.Error;
+                snapshot.ExceptionMessage = e.Message;
+                snapshot.ExceptionType = e.GetType().ToString();
+                snapshot.Status = DataStatus.Error;
                 Console.WriteLine($" || Error! {e.Message}");
-                await _dbContext.SaveChangesAsync();
             }
         }
+
+        scrape.Finished = true;
     }
 
 
@@ -226,113 +298,39 @@ public class LinkChecker
         return new Uri(new UriBuilder(uri) { Fragment = "" }.Uri.ToString());
     }
 
-    internal List<Snapshot> GetOrCreateWebsites(IEnumerable<Uri> uris, Scrape scrape)
-    {
-        var websites = _dbContext.Snapshots
-            .Where(snapshot => uris.Contains(snapshot.Uri) && snapshot.ScrapeId == scrape.ScrapeId).ToList();
-        var otherUris = uris.Except(websites.Select(website => website.Uri)).Select(SimplifyUri).ToList();
-        foreach (var otherUri in otherUris)
-        {
-            var snapshot = new Snapshot()
-            {
-                Uri = otherUri,
-                Scrape = scrape,
-            };
-            snapshot.AnalyzeBecauseUrl = ShouldAnalyze(otherUri);
-            _dbContext.Snapshots.Add(snapshot);
-            websites.Add(snapshot);
-        }
-
-        if (otherUris.Count > 0)
-            _dbContext.SaveChanges();
-        return websites;
-    }
-
-    internal Snapshot GetOrCreateWebsite(Uri simplifiedUri, Scrape scrape)
+    internal Snapshot GetOrCreateWebsite(Uri uri, Scrape scrape)
     {
         // canonicalize uri (remove default ports etc)
-        simplifiedUri = new Uri(simplifiedUri.ToString());
-        var snapshot = _dbContext.Snapshots.FirstOrDefault(snapshot =>
-            snapshot.Uri == simplifiedUri && snapshot.ScrapeId == scrape.ScrapeId);
+        uri = new Uri(SimplifyUri(uri).ToString());
+        var snapshot = Snapshots.FirstOrDefault(snapshot =>
+            snapshot.Uri == uri && snapshot.ScrapeId == scrape.ScrapeId);
 
 
         if (snapshot == null)
         {
             snapshot = new Snapshot()
             {
-                Uri = simplifiedUri,
-                Scrape = scrape,
+                SnapshotId = Guid.NewGuid(),
+                Uri = uri,
+                ScrapeId = scrape.ScrapeId,
+                AnalyzeBecauseUrl = ShouldAnalyze(uri)
             };
-            if (ShouldAnalyze(simplifiedUri))
-                snapshot.AnalyzeBecauseUrl = true;
-            _dbContext.Snapshots.Add(snapshot);
-            //_dbContext.SaveChanges();
+            Snapshots.Add(snapshot);
         }
 
         return snapshot;
     }
 }
 
-public class WebSnapshot(Uri originalUri)
+public class CustomDistanceRelaxer : IDistanceRelaxer
 {
-    public WebSnapshot() : this(null!)
-    {
-    }
+    public double InitialDistance => double.PositiveInfinity;
 
-    public Guid Id = Guid.NewGuid();
-    public Uri OriginalUri = originalUri;
-    public Uri? RedirectUri;
-    [JsonIgnore] public Uri Uri => RedirectUri ?? OriginalUri;
-    public List<WebRefOld> SourceSites = new();
-    public List<LinkData> OutgoingNonHttpHttpsLinks = new();
-    public WebsiteState State = WebsiteState.JustAdded;
-    public string? ExceptionMessage;
-    public string? ExceptionType;
-    public WebsiteContentData? ContentData;
-    public HttpStatusCode? HttpStatusCode;
-}
+    public double Combine(double distance, double edgeWeight) => distance + edgeWeight;
 
-public class WebRefOld
-{
-    public WebRefOld()
-    {
-        WebSnapshot = new WebSnapshot();
-    }
+    public int Compare(double a, double b) => a.CompareTo(b);
 
-    public WebRefOld(LinkData linkData, WebSnapshot webSnapshot)
-    {
-        this.linkData = linkData;
-        this.WebSnapshot = webSnapshot;
-    }
+    public double Add(double a, double b) => a + b;
 
-    public LinkData linkData;
-    [JsonIgnore] public WebSnapshot WebSnapshot;
-
-    public Guid WebsiteId
-    {
-        get => WebSnapshot.Id;
-        set => WebSnapshot.Id = value;
-    }
-}
-
-public class WebsiteContentData
-{
-    public string? ExceptionMessage;
-    public string? ExceptionType;
-    public string? Title;
-    public string? Description;
-    public string? Typo3PageId;
-}
-
-public enum WebsiteState
-{
-    JustAdded,
-    NotForScan,
-    Scanned,
-}
-
-public class ContentData
-{
-    public string Title;
-    public string Description;
+    public double Zero => 0;
 }

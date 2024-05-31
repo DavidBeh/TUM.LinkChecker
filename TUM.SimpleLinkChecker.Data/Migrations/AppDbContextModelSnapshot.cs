@@ -3,7 +3,6 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TUM.SimpleLinkChecker.Data;
 
 #nullable disable
@@ -16,29 +15,25 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.6")
-                .HasAnnotation("Relational:MaxIdentifierLength", 63);
-
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+            modelBuilder.HasAnnotation("ProductVersion", "8.0.6");
 
             modelBuilder.Entity("TUM.SimpleLinkChecker.Data.Scrape", b =>
                 {
                     b.Property<Guid>("ScrapeId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ExceptionMessage")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ExceptionType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("Finished")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("TimeStamp")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("ScrapeId");
 
@@ -49,59 +44,59 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
                 {
                     b.Property<Guid>("SnapshotId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("AnalyzeBecauseReference")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("AnalyzeBecauseUrl")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("C_Description")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("C_Title")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("C_Typo3PageId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ContentExceptionMessage")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ContentExceptionType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool?>("ContentScraped")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("ContentStatus")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ContentType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("Downloaded")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ExceptionMessage")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ExceptionType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("HttpStatusCode")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid>("ScrapeId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Status")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Uri")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("SnapshotId");
 
@@ -114,28 +109,28 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
                 {
                     b.Property<Guid>("WebRefId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("LinkMalformed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("LinkText")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RawLink")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid>("SourceId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<Guid?>("TargetId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Type")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("XPath")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("WebRefId");
 
@@ -167,7 +162,8 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
 
                     b.HasOne("TUM.SimpleLinkChecker.Data.Snapshot", "Target")
                         .WithMany("IncomingLinks")
-                        .HasForeignKey("TargetId");
+                        .HasForeignKey("TargetId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Source");
 

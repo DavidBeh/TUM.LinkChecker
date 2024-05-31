@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace TUM.SimpleLinkChecker.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,11 +15,11 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
                 name: "Scrapes",
                 columns: table => new
                 {
-                    ScrapeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    ExceptionMessage = table.Column<string>(type: "text", nullable: true),
-                    ExceptionType = table.Column<string>(type: "text", nullable: true),
-                    Finished = table.Column<bool>(type: "boolean", nullable: false)
+                    ScrapeId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    TimeStamp = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    ExceptionMessage = table.Column<string>(type: "TEXT", nullable: true),
+                    ExceptionType = table.Column<string>(type: "TEXT", nullable: true),
+                    Finished = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -30,22 +30,24 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
                 name: "Snapshots",
                 columns: table => new
                 {
-                    SnapshotId = table.Column<Guid>(type: "uuid", nullable: false),
-                    ScrapeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Uri = table.Column<string>(type: "text", nullable: false),
-                    HttpStatusCode = table.Column<int>(type: "integer", nullable: true),
-                    Status = table.Column<int>(type: "integer", nullable: false),
-                    Downloaded = table.Column<bool>(type: "boolean", nullable: false),
-                    ContentType = table.Column<string>(type: "text", nullable: true),
-                    ExceptionMessage = table.Column<string>(type: "text", nullable: true),
-                    ExceptionType = table.Column<string>(type: "text", nullable: true),
-                    ContentScraped = table.Column<bool>(type: "boolean", nullable: true),
-                    ContentStatus = table.Column<int>(type: "integer", nullable: false),
-                    ContentExceptionMessage = table.Column<string>(type: "text", nullable: true),
-                    ContentExceptionType = table.Column<string>(type: "text", nullable: true),
-                    C_Title = table.Column<string>(type: "text", nullable: true),
-                    C_Description = table.Column<string>(type: "text", nullable: true),
-                    C_Typo3PageId = table.Column<string>(type: "text", nullable: true)
+                    SnapshotId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ScrapeId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Uri = table.Column<string>(type: "TEXT", nullable: false),
+                    HttpStatusCode = table.Column<int>(type: "INTEGER", nullable: true),
+                    Status = table.Column<int>(type: "INTEGER", nullable: false),
+                    AnalyzeBecauseUrl = table.Column<bool>(type: "INTEGER", nullable: false),
+                    AnalyzeBecauseReference = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Downloaded = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ContentType = table.Column<string>(type: "TEXT", nullable: true),
+                    ExceptionMessage = table.Column<string>(type: "TEXT", nullable: true),
+                    ExceptionType = table.Column<string>(type: "TEXT", nullable: true),
+                    ContentScraped = table.Column<bool>(type: "INTEGER", nullable: true),
+                    ContentStatus = table.Column<int>(type: "INTEGER", nullable: false),
+                    ContentExceptionMessage = table.Column<string>(type: "TEXT", nullable: true),
+                    ContentExceptionType = table.Column<string>(type: "TEXT", nullable: true),
+                    C_Title = table.Column<string>(type: "TEXT", nullable: true),
+                    C_Description = table.Column<string>(type: "TEXT", nullable: true),
+                    C_Typo3PageId = table.Column<string>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -62,13 +64,14 @@ namespace TUM.SimpleLinkChecker.Data.Migrations
                 name: "WebRefs",
                 columns: table => new
                 {
-                    WebRefId = table.Column<Guid>(type: "uuid", nullable: false),
-                    SourceId = table.Column<Guid>(type: "uuid", nullable: false),
-                    TargetId = table.Column<Guid>(type: "uuid", nullable: false),
-                    LinkText = table.Column<string>(type: "text", nullable: true),
-                    RawLink = table.Column<string>(type: "text", nullable: true),
-                    XPath = table.Column<string>(type: "text", nullable: true),
-                    LinkMalformed = table.Column<bool>(type: "boolean", nullable: false)
+                    WebRefId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    SourceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    TargetId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    LinkText = table.Column<string>(type: "TEXT", nullable: true),
+                    RawLink = table.Column<string>(type: "TEXT", nullable: true),
+                    XPath = table.Column<string>(type: "TEXT", nullable: true),
+                    Type = table.Column<string>(type: "TEXT", nullable: true),
+                    LinkMalformed = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {

@@ -17,6 +17,7 @@ public class WebContentAnalyzeImplementation
         {
             result = result with
             {
+                
                 HeaderData = new WebContentHeaderAnalyzeData(
                     download.Response.Content.Headers.ContentType?.MediaType,
                     download.Response.StatusCode,
@@ -38,7 +39,7 @@ public class WebContentAnalyzeImplementation
                     var title = htmlDocument.DocumentNode.SelectSingleNode("//title")?.InnerText;
                     var description = htmlDocument.DocumentNode.SelectSingleNode("//meta[@name='description']")
                         ?.Attributes["content"].Value;
-                    var links = htmlDocument.DocumentNode.SelectNodes("/html/body//a")
+                    var links = htmlDocument.DocumentNode.SelectNodes("/html/body//a")?
                         .Where(node =>
                             node.Attributes.Contains("href") &&
                             !node.Attributes["href"].Value.StartsWith("javascript:"))
